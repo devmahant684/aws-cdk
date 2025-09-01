@@ -135,6 +135,13 @@
 version: 0.2
 
 phases:
+  install:
+    commands:
+      - echo "Listing current directory and ecs-pipeline folder for debugging"
+      - pwd
+      - ls -la
+      - ls -la ecs-pipeline
+
   pre_build:
     commands:
       - echo "--1 Logging in to Amazon ECR..."
@@ -155,12 +162,12 @@ phases:
     commands:
       - echo "--3 Pushing Docker image to ECR..."
       - docker push $REPOSITORY_URI:$IMAGE_TAG
-
-      - echo "--4 Writing imagedefinitions.json file..."
+      - echo "--4 Writing imagedefinitions.json at root..."
       - printf '[{"name":"my-container","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
 
 artifacts:
   files:
-    - ecs-pipeline/imagedefinitions.json
+    - imagedefinitions.json
+
 
 
