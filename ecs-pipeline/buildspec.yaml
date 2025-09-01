@@ -148,8 +148,8 @@ phases:
 
   build:
     commands:
-      - echo "--2 Building Docker image..."
-      - docker build -t $REPOSITORY_URI:$IMAGE_TAG .
+      - echo "--2 Building Docker image from ecs-pipeline folder..."
+      - docker build -t $REPOSITORY_URI:$IMAGE_TAG ./ecs-pipeline
 
   post_build:
     commands:
@@ -161,5 +161,6 @@ phases:
 
 artifacts:
   files:
-    - imagedefinitions.json
+    - ecs-pipeline/imagedefinitions.json
+
 

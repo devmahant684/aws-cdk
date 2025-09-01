@@ -89,7 +89,7 @@ class PipelineWithBuildStack(NestedStack):
             self,
             "BuildProject",
             project_name=f"{project_name}-{env_name}-codebuild",
-            build_spec=codebuild.BuildSpec.from_source_filename("buildspec.yaml"),
+            build_spec=codebuild.BuildSpec.from_source_filename("ecs-pipeline/buildspec.yaml"),
             environment=codebuild.BuildEnvironment(
                 build_image=codebuild.LinuxBuildImage.STANDARD_7_0,
                 privileged=True,
