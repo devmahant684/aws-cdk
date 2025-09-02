@@ -164,6 +164,7 @@ phases:
       - docker push $REPOSITORY_URI:$IMAGE_TAG
       - echo "--4 Writing imagedefinitions.json at root..."
       - printf '[{"name":"my-container","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+      - cat imagedefinitions.json
 
 artifacts:
   files:

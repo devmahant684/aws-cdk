@@ -20,7 +20,7 @@ class PipelineWithBuildStack(NestedStack):
         repo_owner: str,
         repo_name: str,
         branch_name: str,
-        ecs_service,     # Pass the ECS service construct
+        ecs_service,     
         **kwargs,
     ):
         super().__init__(scope, id, **kwargs)
