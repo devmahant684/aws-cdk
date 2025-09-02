@@ -202,6 +202,10 @@ class PipelineWithASGStack(NestedStack):
             environment=codebuild.BuildEnvironment(
                 build_image=codebuild.LinuxBuildImage.STANDARD_7_0,
                 privileged=False,
+                environment_variables={
+                    "PROJECT_NAME": codebuild.BuildEnvironmentVariable(value=project_name),
+                    "ENV": codebuild.BuildEnvironmentVariable(value=env_name),
+                },
             ),
             role=build_role,
         )
