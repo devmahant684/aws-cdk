@@ -57,6 +57,7 @@ class AppStack(Stack):
             "PipelineWithASGStack",
             project_name=config["PROJECT_NAME"],
             env_name=env_name,
+            asg_name=self.asg_stack.asg.auto_scaling_group_name,
             connection_arn=config["CONNECTION_ARN"],
             repo_owner=config["REPO_OWNER"],
             repo_name=config["REPO_NAME"],

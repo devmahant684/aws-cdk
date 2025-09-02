@@ -137,6 +137,7 @@ class PipelineWithASGStack(NestedStack):
         *,
         project_name: str,
         env_name: str,
+        asg_name: str,
         connection_arn: str,
         repo_owner: str,
         repo_name: str,
@@ -206,6 +207,7 @@ class PipelineWithASGStack(NestedStack):
                 environment_variables={
                     "PROJECT_NAME": codebuild.BuildEnvironmentVariable(value=project_name),
                     "ENV": codebuild.BuildEnvironmentVariable(value=env_name),
+                    "ASG_NAME": codebuild.BuildEnvironmentVariable(value=asg_name),
                 },
             ),
             role=build_role,
