@@ -104,35 +104,25 @@ phases:
 
   build:
     commands:
-      - echo "Fetching latest Amazon Linux 2 AMI ID"
       - |
         AMI_ID=$(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2 --query Parameter.Value --output text)
         echo "Using AMI_ID: $AMI_ID"
-      
-      - echo "Deploy stage:update ASG launch template"
-
-      - |
         LT_NAME="${PROJECT_NAME}-${ENV}-lt-$(date +%s)"
         echo "Creating Launch Template $LT_NAME"
-
-      - |
         aws ec2 create-launch-template \
-          --launch-template-name $LT_NAME \
+          --launch-template-name "$LT_NAME" \
           --version-description "Version for AMI $AMI_ID" \
           --launch-template-data "{\"ImageId\":\"$AMI_ID\",\"InstanceType\":\"t3.micro\",\"IamInstanceProfile\":{\"Name\":\"ecsInstanceRole\"}}"
-
-      - |
-        NEW_LT_VERSION=$(aws ec2 describe-launch-templates --launch-template-names $LT_NAME --query 'LaunchTemplates[0].LatestVersionNumber' --output text)
+        NEW_LT_VERSION=$(aws ec2 describe-launch-templates --launch-template-names "$LT_NAME" --query 'LaunchTemplates[0].LatestVersionNumber' --output text)
         echo "New Launch Template version: $NEW_LT_VERSION"
-
-      - |
         aws autoscaling update-auto-scaling-group \
-          --auto-scaling-group-name $ASG_NAME \
+          --auto-scaling-group-name "$ASG_NAME" \
           --launch-template "LaunchTemplateName=$LT_NAME,Version=$NEW_LT_VERSION"
 
 artifacts:
   files:
     - '**/*'
+
 
 
 
