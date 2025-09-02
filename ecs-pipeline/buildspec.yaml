@@ -1,88 +1,3 @@
-# # version: 0.2
- 
-# # phases:
-# #   pre_build:
-# #     commands:
-    
-# #       - echo Logging in to Amazon ECR...
-# #       - aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 724843234437.dkr.ecr.ap-south-1.amazonaws.com
-# #       - REPOSITORY_URI=724843234437.dkr.ecr.ap-south-1.amazonaws.com/ecs-service
-# #       - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
-# #       - echo "Using image tag:$IMAGE_TAG"
- 
-# #   build:
-# #     commands:
-# #       - echo "Build started on $(date)"
-# #       # - echo "Cleaning old images to avoid duplication..."
-# #       # - docker rmi $(docker images -q) || true
-# #       - echo "Building Docker image with ONLY one tag"
-# #       - docker build --no-cache -t $REPOSITORY_URI:$IMAGE_TAG .
-# #       - echo "Pushing image to ECR..."
-# #       - docker push $REPOSITORY_URI:$IMAGE_TAG
-      
-     
- 
-# #   post_build:
-# #     commands:
-# #       - echo "--1 Fetching the latest task definition..."
-# #       - TASK_DEFINITION=$(aws ecs describe-task-definition --task-definition ecs-blue-green-TD --region ap-south-1)
-# #       - NEW_TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "$REPOSITORY_URI:$IMAGE_TAG" '.taskDefinition | .containerDefinitions[0].image = $IMAGE | .family = "ecs-blue-green-TD" | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
-# #       - echo "$NEW_TASK_DEFINITION" > taskdef.json
-# #       - echo "--3 Comparing image digests to avoid redundant task definition registration..."
-# #       - CURRENT_IMAGE=$(echo $TASK_DEFINITION | jq -r '.taskDefinition.containerDefinitions[0].image')
-# #       - CURRENT_TAG=$(basename $CURRENT_IMAGE)
-# #       - echo " Currently registered tag:$CURRENT_TAG"
-# #       - CURRENT_DIGEST=$(aws ecr describe-images --repository-name ecs-service --image-ids imageTag=$CURRENT_TAG --region ap-south-1 | jq -r '.imageDetails[0].imageDigest')
-# #       - NEW_DIGEST=$(aws ecr describe-images --repository-name ecs-service --image-ids imageTag=$IMAGE_TAG --region ap-south-1 | jq -r '.imageDetails[0].imageDigest')
-# #       - echo " Current digest:$CURRENT_DIGEST"
-# #       - echo " New digest:$NEW_DIGEST"
- 
-# #       - >
-# #         if [ "$CURRENT_DIGEST" != "$NEW_DIGEST" ]; then
-# #           echo " Image digest has changed. Registering new task definition..."
-# #           NEW_TASK_INFO=$(aws ecs register-task-definition --region ap-south-1 --cli-input-json file://taskdef.json)
-# #           NEW_TASK_ARN=$(echo $NEW_TASK_INFO | jq -r '.taskDefinition.taskDefinitionArn')
-# #           echo "--4 New Task Definition ARN: $NEW_TASK_ARN"
-# #         else
-# #           echo " Image digest unchanged. Skipping task definition registration."
-# #           NEW_TASK_ARN=$(echo $TASK_DEFINITION | jq -r '.taskDefinition.taskDefinitionArn')
-# #         fi
- 
-# #       - echo "--5 Replacing TASK_DEFINITION_ARN in appspec.yaml..."
-# #       - sed -i "s|TASK_DEFINITION_ARN|$NEW_TASK_ARN|" appspec.yaml
- 
-# #       - echo "--6 Final appspec.yaml:"
-# #       - cat appspec.yaml
- 
-# #       - echo " Cleaning up dangling images from local Docker..."
-# #       - docker image prune -f
- 
-# #       - echo "--7 Cleaning up untagged images in ECR..."
-# #       - >
-# #         UNTAGGED=$(aws ecr list-images --repository-name ecs-service --filter tagStatus=UNTAGGED --query 'imageIds[*]' --output json) &&
-# #         if [[ "$UNTAGGED" != "[]" ]]; then
-# #           echo "$UNTAGGED" > untagged.json &&
-# #           aws ecr batch-delete-image --repository-name ecs-service --image-ids file://untagged.json &&
-# #           echo " Deleted untagged images from ECR."
-# #         else
-# #           echo " No untagged images to delete from ECR."
-# #         fi
- 
- 
-# # artifacts:
-# #   files:
-    
-# #     - taskdef.json
-# #     - appspec.yaml
-
-
-
-
-
-
-
-
-
 # version: 0.2
  
 # phases:
@@ -131,44 +46,86 @@
 
 
 
+# #simplepipeline
+# version: 0.2
+
+# phases:
+#   install:
+#     commands:
+#       - echo "Listing current directory and ecs-pipeline folder for debugging"
+#       - pwd
+#       - ls -la
+#       - ls -la ecs-pipeline
+
+#   pre_build:
+#     commands:
+#       - echo "--1 Logging in to Amazon ECR..."
+#       - aws --version
+#       - ACCOUNT_ID=724843234437
+#       - REGION=ap-south-1
+#       - REPOSITORY_NAME=ecspipeline-prod-repository
+#       - REPOSITORY_URI=$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$REPOSITORY_NAME
+#       - IMAGE_TAG=latest
+#       - aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
+
+#   build:
+#     commands:
+#       - echo "--2 Building Docker image from ecs-pipeline folder..."
+#       - docker build -t $REPOSITORY_URI:$IMAGE_TAG ./ecs-pipeline
+
+#   post_build:
+#     commands:
+#       - echo "--3 Pushing Docker image to ECR..."
+#       - docker push $REPOSITORY_URI:$IMAGE_TAG
+#       - echo "--4 Writing imagedefinitions.json at root..."
+#       - printf '[{"name":"my-container","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+#       - cat imagedefinitions.json
+
+# artifacts:
+#   files:
+#     - imagedefinitions.json
+
+
+
+
 
 version: 0.2
 
 phases:
   install:
     commands:
-      - echo "Listing current directory and ecs-pipeline folder for debugging"
-      - pwd
-      - ls -la
-      - ls -la ecs-pipeline
-
-  pre_build:
-    commands:
-      - echo "--1 Logging in to Amazon ECR..."
+      - echo "Installing AWS CLI and dependencies"
+      - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+      - unzip awscliv2.zip
+      - sudo ./aws/install
       - aws --version
-      - ACCOUNT_ID=724843234437
-      - REGION=ap-south-1
-      - REPOSITORY_NAME=ecspipeline-prod-repository
-      - REPOSITORY_URI=$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$REPOSITORY_NAME
-      - IMAGE_TAG=latest
-      - aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
-
+      - yum install -y jq  # optional, if needed for JSON queries
+      
   build:
     commands:
-      - echo "--2 Building Docker image from ecs-pipeline folder..."
-      - docker build -t $REPOSITORY_URI:$IMAGE_TAG ./ecs-pipeline
+      - echo "Build or AMI bake steps here"
+      # Add your AMI baking or build commands
+      
+      - echo "Deploy stage: update ASG launch config or template"
 
-  post_build:
-    commands:
-      - echo "--3 Pushing Docker image to ECR..."
-      - docker push $REPOSITORY_URI:$IMAGE_TAG
-      - echo "--4 Writing imagedefinitions.json at root..."
-      - printf '[{"name":"my-container","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
-      - cat imagedefinitions.json
+      # Replace the following example with your actual AMI ID retrieval logic
+      - |
+        AMI_ID="ami-0123456789abcdef0"
+        echo "Using AMI ID $AMI_ID to update ASG"
+
+      - |
+        aws autoscaling create-launch-configuration --launch-configuration-name ${PROJECT_NAME}-${ENV}-lc-$(date +%s) --image-id $AMI_ID --instance-type t3.micro --iam-instance-profile ecsInstanceRole
+
+      - |
+        NEW_LC_NAME=$(aws autoscaling describe-launch-configurations --query 'LaunchConfigurations[?ImageId==`'"$AMI_ID"'`].LaunchConfigurationName' --output text)
+        echo "New Launch Configuration: $NEW_LC_NAME"
+
+      - |
+        aws autoscaling update-auto-scaling-group --auto-scaling-group-name YOUR_ASG_NAME --launch-configuration-name $NEW_LC_NAME
 
 artifacts:
   files:
-    - imagedefinitions.json
+    - '**/*'
 
 
 
