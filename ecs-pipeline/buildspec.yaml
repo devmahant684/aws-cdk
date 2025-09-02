@@ -104,15 +104,12 @@ phases:
 
   build:
     commands:
-      - echo "Build or AMI bake steps here"
-      # Add your AMI baking or build commands here
-
-      - echo "Deploy stage:update ASG launch template"
-
-      # Replace the following example with your actual AMI ID retrieval logic
+      - echo "Fetching latest Amazon Linux 2 AMI ID"
       - |
-        AMI_ID="ami-0123456789abcdef0"
-        echo "Using AMI ID $AMI_ID to update ASG"
+        AMI_ID=$(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2 --query Parameter.Value --output text)
+        echo "Using AMI_ID: $AMI_ID"
+      
+      - echo "Deploy stage:update ASG launch template"
 
       - |
         LT_NAME="${PROJECT_NAME}-${ENV}-lt-$(date +%s)"
@@ -136,6 +133,8 @@ phases:
 artifacts:
   files:
     - '**/*'
+
+
 
 
 
