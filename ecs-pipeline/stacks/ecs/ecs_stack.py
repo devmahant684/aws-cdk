@@ -176,6 +176,15 @@ class ECSASGStack(NestedStack):
             associate_public_ip_address=True,
         )
 
+        # ASG autoscaling based on EC2 instance CPU utilization
+        asg.scale_on_cpu_utilization(
+            "AsgCpuScaling",
+            target_utilization_percent=50,
+            cooldown=Duration.seconds(60),
+            # adjustment_type=autoscaling.AdjustmentType.CHANGE_IN_CAPACITY,
+        )
+
+
         # IAM Roles for ECS Task
         execution_role = iam.Role(
             self,
@@ -238,6 +247,18 @@ class ECSASGStack(NestedStack):
         )
 
         target_group.add_target(service)
+
+        # ECS Service autoscaling based on container CPU utilization
+        scalable_target = service.auto_scale_task_count(
+            min_capacity=desired_count,
+            max_capacity=desired_count * 4,
+        )
+        scalable_target.scale_on_cpu_utilization(
+            "ServiceCpuScaling",
+            target_utilization_percent=50,
+            scale_in_cooldown=Duration.seconds(60),
+            scale_out_cooldown=Duration.seconds(60),
+        )
 
         Tags.of(service).add("Name", f"{project_name}-{env_name}-ecs-service")
         Tags.of(service).add("Environment", env_name)
