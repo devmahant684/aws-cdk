@@ -100,7 +100,8 @@ phases:
       
       - sudo ./aws/install --update 
       - aws --version
-      - yum install -y jq  # optional, if needed for JSON queries
+      - sudo apt-get update
+      - sudo apt-get install -y jq # optional, if needed for JSON queries
       
   build:
     commands:
