@@ -250,8 +250,8 @@ class ECSASGStack(NestedStack):
 
         # ECS Service autoscaling based on container CPU utilization
         scalable_target = service.auto_scale_task_count(
-            min_capacity=desired_count,
-            max_capacity=desired_count * 4,
+            min_capacity=1,
+            max_capacity=5,
         )
         scalable_target.scale_on_cpu_utilization(
             "ServiceCpuScaling",
