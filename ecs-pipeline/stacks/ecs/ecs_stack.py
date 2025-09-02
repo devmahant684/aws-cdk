@@ -166,7 +166,7 @@ class ECSASGStack(NestedStack):
 
         ecs_ami = ecs.EcsOptimizedImage.amazon_linux2()
 
-        # Add capacity to cluster (creates AutoScalingGroup)
+        # Add capacity to cluster via ASG
         asg = cluster.add_capacity(
             "EcsCapacity",
             instance_type=instance_type,
@@ -181,11 +181,9 @@ class ECSASGStack(NestedStack):
             "AsgCpuScaling",
             target_utilization_percent=50,
             cooldown=Duration.seconds(60),
-            # adjustment_type=autoscaling.AdjustmentType.CHANGE_IN_CAPACITY,
         )
 
-
-        # IAM Roles for ECS Task
+        # IAM Roles for ECS Task Execution and Task Role
         execution_role = iam.Role(
             self,
             "ECSExecutionRole",
@@ -235,7 +233,7 @@ class ECSASGStack(NestedStack):
 
         container.add_port_mappings(ecs.PortMapping(container_port=80))
 
-        # EC2 Service
+        # ECS EC2 Service
         service = ecs.Ec2Service(
             self,
             "EcsService",
@@ -246,9 +244,10 @@ class ECSASGStack(NestedStack):
             health_check_grace_period=Duration.seconds(60),
         )
 
+        # Attach service to ALB target group
         target_group.add_target(service)
 
-        # ECS Service autoscaling based on container CPU utilization
+        # ECS Service autoscaling on container CPU usage
         scalable_target = service.auto_scale_task_count(
             min_capacity=1,
             max_capacity=5,
@@ -260,10 +259,12 @@ class ECSASGStack(NestedStack):
             scale_out_cooldown=Duration.seconds(60),
         )
 
+        # Tags for the ECS Service
         Tags.of(service).add("Name", f"{project_name}-{env_name}-ecs-service")
         Tags.of(service).add("Environment", env_name)
         Tags.of(service).add("Project", project_name)
 
+        # Expose resources
         self.cluster = cluster
         self.service = service
         self.auto_scaling_group = asg
