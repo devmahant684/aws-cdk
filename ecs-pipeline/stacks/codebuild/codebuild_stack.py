@@ -165,6 +165,8 @@ class PipelineWithASGStack(NestedStack):
                 actions=[
                     "autoscaling:UpdateAutoScalingGroup",
                     "autoscaling:CreateLaunchConfiguration",
+                    "ec2:CreateLaunchTemplate",
+                    "ec2:DescribeLaunchTemplates",
                     "ec2:CreateImage",
                     "ec2:DescribeInstances",
                     "iam:PassRole",
