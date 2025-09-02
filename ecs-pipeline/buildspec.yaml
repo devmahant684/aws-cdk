@@ -107,7 +107,7 @@ phases:
       - echo "Build or AMI bake steps here"
       # Add your AMI baking or build commands here
 
-      - echo "Deploy stage: update ASG launch template"
+      - echo "Deploy stage:update ASG launch template"
 
       # Replace the following example with your actual AMI ID retrieval logic
       - |
