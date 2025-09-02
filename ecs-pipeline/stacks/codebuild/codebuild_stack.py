@@ -137,12 +137,12 @@ class PipelineWithASGStack(NestedStack):
         *,
         project_name: str,
         env_name: str,
-        asg_name: str,
         connection_arn: str,
         repo_owner: str,
         repo_name: str,
         branch_name: str,
-        asg_group,  # AutoScalingGroup instance
+        ecs_service,
+        repository,
         **kwargs,
     ):
         super().__init__(scope, id, **kwargs)
@@ -150,93 +150,88 @@ class PipelineWithASGStack(NestedStack):
         pipeline_role = iam.Role(
             self,
             "CodePipelineRole",
-            role_name=f"{project_name}-{env_name}-codepipeline-role",
             assumed_by=iam.ServicePrincipal("codepipeline.amazonaws.com"),
+            role_name=f"{project_name}-{env_name}-codepipeline-role",
         )
 
         build_role = iam.Role(
             self,
             "CodeBuildRole",
-            role_name=f"{project_name}-{env_name}-codebuild-role",
             assumed_by=iam.ServicePrincipal("codebuild.amazonaws.com"),
+            role_name=f"{project_name}-{env_name}-codebuild-role",
         )
         build_role.add_to_policy(
             iam.PolicyStatement(
                 actions=[
-                    "autoscaling:UpdateAutoScalingGroup",
-                    "autoscaling:CreateLaunchConfiguration",
-                    "ec2:CreateLaunchTemplate",
-                    "ec2:DescribeLaunchTemplates",
-                    "ec2:CreateImage",
-                    "ec2:DescribeInstances",
+                    "ecr:GetAuthorizationToken",
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:BatchGetImage",
+                    "ecr:PutImage",
+                    "ecr:InitiateLayerUpload",
+                    "ecr:UploadLayerPart",
+                    "ecr:CompleteLayerUpload",
+                    "ecs:DescribeServices",
+                    "ecs:DescribeTaskDefinition",
+                    "ecs:RegisterTaskDefinition",
+                    "ecs:UpdateService",
                     "iam:PassRole",
                 ],
                 resources=["*"],
             )
         )
 
-        self.pipeline = codepipeline.Pipeline(
+        pipeline = codepipeline.Pipeline(
             self,
             "Pipeline",
             pipeline_name=f"{project_name}-{env_name}-pipeline",
             role=pipeline_role,
         )
 
-        self.source_output = codepipeline.Artifact(artifact_name="SourceArtifact")
-        self.build_output = codepipeline.Artifact(artifact_name="BuildArtifact")
+        source_output = codepipeline.Artifact(artifact_name="SourceArtifact")
+        build_output = codepipeline.Artifact(artifact_name="BuildArtifact")
 
-        # Source stage: GitHub repo via CodeStar connection
         source_action = cp_actions.CodeStarConnectionsSourceAction(
             action_name="GitHub_Source",
             connection_arn=connection_arn,
             owner=repo_owner,
             repo=repo_name,
             branch=branch_name,
-            output=self.source_output,
+            output=source_output,
             trigger_on_push=True,
         )
-        self.pipeline.add_stage(stage_name="Source", actions=[source_action])
 
-        # Build stage referencing ecs-pipeline/buildspec.yaml
-        self.build_project = codebuild.PipelineProject(
+        pipeline.add_stage(stage_name="Source", actions=[source_action])
+
+        build_project = codebuild.PipelineProject(
             self,
             "BuildProject",
             project_name=f"{project_name}-{env_name}-codebuild",
             build_spec=codebuild.BuildSpec.from_source_filename("ecs-pipeline/buildspec.yaml"),
             environment=codebuild.BuildEnvironment(
                 build_image=codebuild.LinuxBuildImage.STANDARD_7_0,
-                privileged=False,
-                environment_variables={
-                    "PROJECT_NAME": codebuild.BuildEnvironmentVariable(value=project_name),
-                    "ENV": codebuild.BuildEnvironmentVariable(value=env_name),
-                    "ASG_NAME": codebuild.BuildEnvironmentVariable(value=asg_name),
-                },
+                privileged=True,
             ),
             role=build_role,
         )
+
         build_action = cp_actions.CodeBuildAction(
             action_name="Build",
-            project=self.build_project,
-            input=self.source_output,
-            outputs=[self.build_output],
+            project=build_project,
+            input=source_output,
+            outputs=[build_output],
         )
-        self.pipeline.add_stage(stage_name="Build", actions=[build_action])
 
-        # Deploy stage referencing ecs-pipeline/buildspec-deploy.yaml
-        self.deploy_project = codebuild.PipelineProject(
-            self,
-            "DeployProject",
-            project_name=f"{project_name}-{env_name}-deploy",
-            build_spec=codebuild.BuildSpec.from_source_filename("ecs-pipeline/buildspec-deploy.yaml"),
-            environment=codebuild.BuildEnvironment(
-                build_image=codebuild.LinuxBuildImage.STANDARD_7_0,
-            ),
-            role=build_role,
-        )
-        deploy_action = cp_actions.CodeBuildAction(
+        pipeline.add_stage(stage_name="Build", actions=[build_action])
+
+        deploy_action = cp_actions.EcsDeployAction(
             action_name="Deploy",
-            project=self.deploy_project,
-            input=self.build_output,
+            service=ecs_service,
+            input=build_output,
         )
-        self.pipeline.add_stage(stage_name="Deploy", actions=[deploy_action])
 
+        pipeline.add_stage(stage_name="Deploy", actions=[deploy_action])
+
+        self.pipeline = pipeline
+        self.build_project = build_project
+        self.pipeline_role = pipeline_role
+        self.build_role = build_role

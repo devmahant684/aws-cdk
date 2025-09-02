@@ -47,6 +47,46 @@
 
 
 # #simplepipeline
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo "Listing current directory and ecs-pipeline folder for debugging"
+      - pwd
+      - ls -la
+      - ls -la ecs-pipeline
+
+  pre_build:
+    commands:
+      - echo "--1 Logging in to Amazon ECR..."
+      - aws --version
+      - ACCOUNT_ID=724843234437
+      - REGION=ap-south-1
+      - REPOSITORY_NAME=ecspipeline-prod-repository
+      - REPOSITORY_URI=$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$REPOSITORY_NAME
+      - IMAGE_TAG=latest
+      - aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
+
+  build:
+    commands:
+      - echo "--2 Building Docker image from ecs-pipeline folder..."
+      - docker build -t $REPOSITORY_URI:$IMAGE_TAG ./ecs-pipeline
+
+  post_build:
+    commands:
+      - echo "--3 Pushing Docker image to ECR..."
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - echo "--4 Writing imagedefinitions.json at root..."
+      - printf '[{"name":"my-container","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+      - cat imagedefinitions.json
+
+artifacts:
+  files:
+    - imagedefinitions.json
+
+
+
 # version: 0.2
 
 # phases:
@@ -61,11 +101,12 @@
 #     commands:
 #       - echo "--1 Logging in to Amazon ECR..."
 #       - aws --version
-#       - ACCOUNT_ID=724843234437
-#       - REGION=ap-south-1
-#       - REPOSITORY_NAME=ecspipeline-prod-repository
+#       - ACCOUNT_ID=${ACCOUNT_ID}
+#       - REGION=${AWS_REGION}
+#       - REPOSITORY_NAME=${REPOSITORY_NAME}
 #       - REPOSITORY_URI=$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$REPOSITORY_NAME
-#       - IMAGE_TAG=latest
+#       - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)  # short git commit hash tag
+#       - echo "Using image tag:$IMAGE_TAG"
 #       - aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
 
 #   build:
@@ -89,39 +130,6 @@
 
 
 
-version: 0.2
-
-phases:
-  install:
-    commands:
-      - echo "Installing AWS CLI and dependencies"
-      - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-      - unzip awscliv2.zip
-      - sudo ./aws/install --update
-      - aws --version
-      - sudo apt-get update
-      - sudo apt-get install -y jq
-
-  build:
-    commands:
-      - |
-        AMI_ID=$(aws ssm get-parameter --name /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2 --query Parameter.Value --output text)
-        echo "Using AMI_ID: $AMI_ID"
-        LT_NAME="${PROJECT_NAME}-${ENV}-lt-$(date +%s)"
-        echo "Creating Launch Template $LT_NAME"
-        aws ec2 create-launch-template \
-          --launch-template-name "$LT_NAME" \
-          --version-description "Version for AMI $AMI_ID" \
-          --launch-template-data "{\"ImageId\":\"$AMI_ID\",\"InstanceType\":\"t3.micro\",\"IamInstanceProfile\":{\"Name\":\"ecsInstanceRole\"}}"
-        NEW_LT_VERSION=$(aws ec2 describe-launch-templates --launch-template-names "$LT_NAME" --query 'LaunchTemplates[0].LatestVersionNumber' --output text)
-        echo "New Launch Template version: $NEW_LT_VERSION"
-        aws autoscaling update-auto-scaling-group \
-          --auto-scaling-group-name "$ASG_NAME" \
-          --launch-template "LaunchTemplateName=$LT_NAME,Version=$NEW_LT_VERSION"
-
-artifacts:
-  files:
-    - '**/*'
 
 
 
