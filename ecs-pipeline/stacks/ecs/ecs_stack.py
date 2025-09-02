@@ -179,7 +179,7 @@ class ECSASGStack(NestedStack):
         # ASG autoscaling based on EC2 instance CPU utilization
         asg.scale_on_cpu_utilization(
             "AsgCpuScaling",
-            target_utilization_percent=50,
+            target_utilization_percent=5,
             cooldown=Duration.seconds(60),
         )
 
@@ -249,7 +249,7 @@ class ECSASGStack(NestedStack):
 
         # ECS Service autoscaling on container CPU usage
         scalable_target = service.auto_scale_task_count(
-            min_capacity=1,
+            min_capacity=2,
             max_capacity=5,
         )
         scalable_target.scale_on_cpu_utilization(
