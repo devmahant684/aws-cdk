@@ -163,6 +163,7 @@ class PipelineWithASGStack(NestedStack):
             iam.PolicyStatement(
                 actions=[
                     "autoscaling:UpdateAutoScalingGroup",
+                    "autoscaling:CreateLaunchConfiguration",
                     "ec2:CreateImage",
                     "ec2:DescribeInstances",
                     "iam:PassRole",
