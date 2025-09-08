@@ -135,15 +135,16 @@ from aws_cdk import (
     aws_iam as iam,
     aws_logs as logs,
     aws_ecr as ecr,
-    aws_autoscaling as autoscaling,
     aws_elasticloadbalancingv2 as elbv2,
+    aws_cloudwatch as cloudwatch,
+    aws_applicationautoscaling as appscaling,
     Tags,
     Duration,
 )
 from constructs import Construct
 
 
-class ECSASGStack(NestedStack):
+class ECSFargateSimpleStack(NestedStack):
     def __init__(
         self,
         scope: Construct,
@@ -155,64 +156,66 @@ class ECSASGStack(NestedStack):
         project_name: str,
         env_name: str,
         desired_count: int = 1,
-        instance_type: ec2.InstanceType = ec2.InstanceType("t3.micro"),
         **kwargs,
     ) -> None:
         super().__init__(scope, id, **kwargs)
 
-        # ECS Cluster
+        # ECS Security Group
+        ecs_sg = ec2.SecurityGroup(
+            self,
+            "ECSSecurityGroup",
+            vpc=vpc,
+            description="Security group for ECS Fargate service",
+            allow_all_outbound=True,
+        )
+        ecs_sg.add_ingress_rule(
+            peer=ec2.Peer.any_ipv4(),
+            connection=ec2.Port.tcp(80),
+            description="Allow HTTP traffic to ECS tasks",
+        )
+
         cluster_name = f"{project_name}-{env_name}-cluster"
-        cluster = ecs.Cluster(self, "ECSCluster", vpc=vpc, cluster_name=cluster_name)
+        execution_role_name = f"{project_name}-{env_name}-ecs-execution-role"
+        task_role_name = f"{project_name}-{env_name}-ecs-task-role"
 
-        ecs_ami = ecs.EcsOptimizedImage.amazon_linux2()
-
-        # Add capacity to cluster via ASG
-        asg = cluster.add_capacity(
-            "EcsCapacity",
-            instance_type=instance_type,
-            desired_capacity=desired_count,
-            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
-            machine_image=ecs_ami,
-            associate_public_ip_address=True,
+        # Create ECS Cluster
+        cluster = ecs.Cluster(
+            self,
+            "ECSCluster",
+            vpc=vpc,
+            cluster_name=cluster_name,
         )
 
-        # ASG autoscaling based on EC2 instance CPU utilization
-        asg.scale_on_cpu_utilization(
-            "AsgCpuScaling",
-            target_utilization_percent=5,
-            cooldown=Duration.seconds(60),
-        )
-
-        # IAM Roles for ECS Task Execution and Task Role
+        # Create IAM Roles
         execution_role = iam.Role(
             self,
             "ECSExecutionRole",
+            role_name=execution_role_name,
             assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name(
                     "service-role/AmazonECSTaskExecutionRolePolicy"
                 )
             ],
-            role_name=f"{project_name}-{env_name}-ecs-execution-role",
         )
 
         task_role = iam.Role(
             self,
             "ECSTaskRole",
+            role_name=task_role_name,
             assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
-            role_name=f"{project_name}-{env_name}-ecs-task-role",
         )
         task_role.add_managed_policy(
-            iam.ManagedPolicy.from_aws_managed_policy_name(
-                "AmazonEC2ContainerRegistryReadOnly"
-            )
+            iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEC2ContainerRegistryReadOnly")
         )
 
-        # EC2 Task Definition
-        task_def = ecs.Ec2TaskDefinition(
+        # Task Definition
+        task_def = ecs.FargateTaskDefinition(
             self,
             "TaskDefinition",
             family=f"{project_name}-{env_name}-taskdef",
+            memory_limit_mib=512,
+            cpu=256,
             execution_role=execution_role,
             task_role=task_role,
         )
@@ -223,49 +226,70 @@ class ECSASGStack(NestedStack):
         container = task_def.add_container(
             container_name,
             image=ecs.ContainerImage.from_ecr_repository(repository, tag="latest"),
-            memory_reservation_mib=512,
-            cpu=256,
+            port_mappings=[ecs.PortMapping(container_port=80)],
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix=stream_prefix,
                 log_retention=logs.RetentionDays.ONE_WEEK,
             ),
         )
 
-        container.add_port_mappings(ecs.PortMapping(container_port=80))
-
-        # ECS EC2 Service
-        service = ecs.Ec2Service(
+        # Create Fargate Service
+        fargate_service = ecs.FargateService(
             self,
-            "EcsService",
+            "FargateService",
             cluster=cluster,
             service_name=f"{project_name}-{env_name}-service",
             task_definition=task_def,
             desired_count=desired_count,
-            health_check_grace_period=Duration.seconds(60),
+            security_groups=[ecs_sg],
+            assign_public_ip=True,
+            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
         )
 
-        # Attach service to ALB target group
-        target_group.add_target(service)
+        # Attach service to the ALB IP-based target group
+        target_group.add_target(fargate_service)
 
-        # ECS Service autoscaling on container CPU usage
-        scalable_target = service.auto_scale_task_count(
-            min_capacity=2,
+        # Custom CloudWatch metric with 1-minute period
+        cpu_metric_1m = cloudwatch.Metric(
+            namespace="AWS/ECS",
+            metric_name="CPUUtilization",
+            dimensions_map={
+                "ClusterName": cluster.cluster_name,
+                "ServiceName": fargate_service.service_name,
+            },
+            statistic="Average",
+            period=Duration.minutes(1),  # 1-minute granularity
+        )
+
+        # Enable AutoScaling with 1-minute evaluation period and scaling steps
+        scalable_target = fargate_service.auto_scale_task_count(
+            min_capacity=1,
             max_capacity=5,
         )
-        scalable_target.scale_on_cpu_utilization(
-            "ServiceCpuScaling",
-            target_utilization_percent=50,
-            scale_in_cooldown=Duration.seconds(60),
-            scale_out_cooldown=Duration.seconds(60),
+        scalable_target.scale_on_metric(
+            "CpuScalingWith1MPeriod",
+            metric=cpu_metric_1m,
+            scaling_steps=[
+                appscaling.ScalingInterval(change=-1, upper=4),  # scale OUT if > 5%
+                appscaling.ScalingInterval(change=+1, lower=6),  # scale IN if < 5%
+            ],
+            evaluation_periods=1,                     # 1 datapoint in 1 minute
+            adjustment_type=appscaling.AdjustmentType.CHANGE_IN_CAPACITY,
+            cooldown=Duration.seconds(60),
         )
 
-        # Tags for the ECS Service
-        Tags.of(service).add("Name", f"{project_name}-{env_name}-ecs-service")
-        Tags.of(service).add("Environment", env_name)
-        Tags.of(service).add("Project", project_name)
+        # Tags
+        Tags.of(fargate_service).add("Name", f"{project_name}-{env_name}-ecs-service")
+        Tags.of(fargate_service).add("Environment", env_name)
+        Tags.of(fargate_service).add("Project", project_name)
 
-        # Expose resources
+
+        # Expose repository for downstream use
+        self.repository = repository
+
+
+        # Exports for integration
         self.cluster = cluster
-        self.service = service
-        self.auto_scaling_group = asg
+        self.service = fargate_service
+        self.security_group = ecs_sg
         self.execution_role = execution_role

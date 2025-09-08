@@ -14,7 +14,7 @@ def get_config() -> dict:
         "VPC_CIDR": os.getenv("VPC_CIDR"),
         "NUM_PUBLIC_SUBNETS": int(os.getenv("NUM_PUBLIC_SUBNETS")),
         "NUM_PRIVATE_SUBNETS": int(os.getenv("NUM_PRIVATE_SUBNETS")),
-        "CONNECTION_ARN": os.getenv("CONNECTION_ARN"),
+        "CODESTAR_CONNECTION_ARN": os.getenv("CONNECTION_ARN"),
         "REPO_OWNER": os.getenv("REPO_OWNER"),
         "REPO_NAME": os.getenv("REPO_NAME"),
         "BRANCH_NAME": os.getenv("BRANCH_NAME", "main"),

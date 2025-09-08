@@ -65,8 +65,8 @@ class ALBStack(NestedStack):
             target_group_name=f"{project_name}-{env_name}-tg",
             protocol=elbv2.ApplicationProtocol.HTTP,
             port=80,
-            # target_type=elbv2.TargetType.IP,
-            target_type=elbv2.TargetType.INSTANCE,
+            target_type=elbv2.TargetType.IP,
+            # target_type=elbv2.TargetType.INSTANCE,
             health_check=elbv2.HealthCheck(path="/"),
         )
 

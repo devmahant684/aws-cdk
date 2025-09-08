@@ -129,6 +129,7 @@ from aws_cdk import (
 )
 from constructs import Construct
 
+
 class PipelineWithASGStack(NestedStack):
     def __init__(
         self,
